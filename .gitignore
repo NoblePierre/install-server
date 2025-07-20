@@ -1,0 +1,31 @@
+# Fichiers sensibles
+*.key
+*.pem
+*.pub
+ssh_keys/
+private_keys/
+public_keys/
+
+# Fichiers de configuration avec des secrets
+.env
+.env.local
+.env.production
+config/secrets.yml
+config/database.yml
+
+# Logs
+*.log
+logs/
+
+# Fichiers temporaires
+*.tmp
+*.temp
+*~
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# Fichiers de sauvegarde
+*.bak
+*.backup 
