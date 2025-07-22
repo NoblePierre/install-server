@@ -56,22 +56,49 @@ sudo apt update && sudo apt install -y \
   unzip tar curl git composer nodejs npm redis-server php-redis
 
 ## Configuration DB
-sudo mysql -e "CREATE DATABASE ${DB_NAME};"
-sudo mysql -e "CREATE USER '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASS}';"
+# Vérifie si la base existe déjà
+if sudo mysql -e "USE ${DB_NAME};" 2>/dev/null; then
+  echo "[SKIP] La base de données ${DB_NAME} existe déjà."
+else
+  sudo mysql -e "CREATE DATABASE ${DB_NAME};"
+fi
+# Vérifie si l'utilisateur existe déjà
+if sudo mysql -e "SELECT User FROM mysql.user WHERE User='${DB_USER}' AND Host='127.0.0.1';" | grep ${DB_USER} >/dev/null; then
+  echo "[SKIP] L'utilisateur DB ${DB_USER} existe déjà."
+else
+  sudo mysql -e "CREATE USER '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASS}';"
+fi
 sudo mysql -e "GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'127.0.0.1';"
 sudo mysql -e "FLUSH PRIVILEGES;"
 
 ## Téléchargement du panel
-sudo mkdir -p $PANEL_DIR
-sudo chown -R $USER:$USER $PANEL_DIR
+if [ -d "$PANEL_DIR/.git" ]; then
+  echo "[SKIP] Le dépôt Pterodactyl est déjà cloné dans $PANEL_DIR."
+else
+  sudo mkdir -p $PANEL_DIR
+  sudo chown -R $USER:$USER $PANEL_DIR
+  cd $PANEL_DIR
+  git clone https://github.com/pterodactyl/panel.git .
+  git checkout `git describe --tags $(git rev-list --tags --max-count=1)`
+fi
 cd $PANEL_DIR
-git clone https://github.com/pterodactyl/panel.git .
-git checkout `git describe --tags $(git rev-list --tags --max-count=1)`
 
 ## Installation backend Laravel
-cp .env.example .env
-composer install --no-dev --optimize-autoloader
-php artisan key:generate --force
+if [ -f ".env" ]; then
+  echo "[SKIP] Le fichier .env existe déjà."
+else
+  cp .env.example .env
+fi
+if [ -d "vendor" ]; then
+  echo "[SKIP] Les dépendances composer sont déjà installées."
+else
+  composer install --no-dev --optimize-autoloader
+fi
+if grep -q "^APP_KEY=" .env && [ $(grep "^APP_KEY=" .env | cut -d'=' -f2 | wc -c) -gt 1 ]; then
+  echo "[SKIP] La clé APP_KEY existe déjà."
+else
+  php artisan key:generate --force
+fi
 
 ## Configuration DB dans .env (non interactif ici)
 sed -i \
@@ -81,16 +108,26 @@ sed -i \
 .env
 
 ## Migration de la base
-php artisan migrate --seed --force
+if php artisan migrate:status | grep -q "Yes"; then
+  echo "[SKIP] Les migrations semblent déjà appliquées."
+else
+  php artisan migrate --seed --force
+fi
 
 ## Stockage, permissions
-php artisan p:environment:setup --author="admin@localhost" --url="https://${PANEL_DOMAIN}"
-php artisan storage:link
+if [ -L "public/storage" ]; then
+  echo "[SKIP] Le lien storage existe déjà."
+else
+  php artisan storage:link
+fi
 php artisan view:clear
 chown -R www-data:www-data $PANEL_DIR
 
 ## Configuration Nginx
-cat <<EOF | sudo tee /etc/nginx/sites-available/pterodactyl
+if [ -f "/etc/nginx/sites-available/pterodactyl" ]; then
+  echo "[SKIP] La config Nginx existe déjà."
+else
+  cat <<EOF | sudo tee /etc/nginx/sites-available/pterodactyl
 server {
     listen 80;
     server_name ${PANEL_DOMAIN};
@@ -102,7 +139,7 @@ server {
         try_files \$uri \$uri/ /index.php?\$query_string;
     }
 
-    location ~ \.(php|php5)$ {
+    location ~ \\.(php|php5)$ {
         include snippets/fastcgi-php.conf;
         fastcgi_pass unix:/run/php/php8.2-fpm.sock;
         fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
@@ -110,25 +147,37 @@ server {
     }
 }
 EOF
-
-sudo ln -s /etc/nginx/sites-available/pterodactyl /etc/nginx/sites-enabled/pterodactyl
-sudo systemctl reload nginx
+  sudo ln -sf /etc/nginx/sites-available/pterodactyl /etc/nginx/sites-enabled/pterodactyl
+  sudo systemctl reload nginx
+fi
 
 ## Préparation de l'admin
-php artisan p:user:make --email=admin@localhost --username=admin --name-first=Admin --name-last=User --password="admin123" --admin
+if php artisan p:user:lookup --email=admin@localhost | grep -q 'ID'; then
+  echo "[SKIP] L'utilisateur admin@localhost existe déjà."
+else
+  php artisan p:user:make --email=admin@localhost --username=admin --name-first=Admin --name-last=User --password="admin123" --admin
+fi
 
 ## Installation de Wings (agent Docker)
-curl -sSL https://get.docker.com | sh
+if command -v docker >/dev/null; then
+  echo "[SKIP] Docker est déjà installé."
+else
+  curl -sSL https://get.docker.com | sh
+fi
 
-sudo mkdir -p /etc/pterodactyl
-curl -o /etc/pterodactyl/config.yml https://raw.githubusercontent.com/pterodactyl/wings/main/config.example.yml
+if [ -f "/usr/local/bin/wings" ]; then
+  echo "[SKIP] L'exécutable Wings existe déjà."
+else
+  sudo mkdir -p /etc/pterodactyl
+  curl -o /etc/pterodactyl/config.yml https://raw.githubusercontent.com/pterodactyl/wings/main/config.example.yml
+  curl -L https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_amd64 -o /usr/local/bin/wings
+  chmod +x /usr/local/bin/wings
+fi
 
-# Téléchargement de l'exécutable Wings
-curl -L https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_amd64 -o /usr/local/bin/wings
-chmod +x /usr/local/bin/wings
-
-# Créer un service systemd
-cat <<EOF | sudo tee /etc/systemd/system/wings.service
+if [ -f "/etc/systemd/system/wings.service" ]; then
+  echo "[SKIP] Le service systemd Wings existe déjà."
+else
+  cat <<EOF | sudo tee /etc/systemd/system/wings.service
 [Unit]
 Description=Pterodactyl Wings Daemon
 After=docker.service
@@ -144,9 +193,9 @@ LimitNOFILE=4096
 [Install]
 WantedBy=multi-user.target
 EOF
-
-sudo systemctl daemon-reexec
-sudo systemctl enable --now wings
+  sudo systemctl daemon-reexec
+  sudo systemctl enable --now wings
+fi
 
 ## Fin
 clear
