@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # Base de données MySQL pour Pterodactyl
+  database:
+    image: mariadb:10.6
+    container_name: pterodactyl-database
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pterodactyl-database:/var/lib/mysql
+    networks:
+      - pterodactyl-network
+
+  # Redis pour les sessions et cache
+  redis:
+    image: redis:7-alpine
+    container_name: pterodactyl-redis
+    restart: unless-stopped
+    volumes:
+      - pterodactyl-redis:/data
+    networks:
+      - pterodactyl-network
+
+  # Panel Pterodactyl (interface web)
+  panel:
+    image: pterodactyl/panel:latest
+    container_name: pterodactyl-panel
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - APP_URL=https://${PANEL_DOMAIN}
+      - DB_HOST=database
+      - DB_PORT=3306
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MAIL_MAILER=smtp
+      - MAIL_HOST=${MAIL_HOST}
+      - MAIL_PORT=${MAIL_PORT}
+      - MAIL_USERNAME=${MAIL_USERNAME}
+      - MAIL_PASSWORD=${MAIL_PASSWORD}
+      - MAIL_ENCRYPTION=${MAIL_ENCRYPTION}
+      - MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS}
+      - MAIL_FROM_NAME=${MAIL_FROM_NAME}
+    volumes:
+      - pterodactyl-panel:/var/www/pterodactyl
+      - ./uploads:/var/www/pterodactyl/public/uploads
+    depends_on:
+      - database
+      - redis
+    networks:
+      - pterodactyl-network
+
+volumes:
+  pterodactyl-database:
+  pterodactyl-redis:
+  pterodactyl-panel:
+
+networks:
+  pterodactyl-network:
+    driver: bridge 

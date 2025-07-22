@@ -1,0 +1,21 @@
+{
+    "_comment": "CS2 Egg by OpenAI, base image: ghcr.io/parkervcp/games:source",
+    "name": "Counter-Strike 2",
+    "description": "Counter-Strike 2 - Source 2",
+    "docker_images": {
+      "ghcr.io/parkervcp/games:source": "Source 2 base image"
+    },
+    "startup": "./srcds_run -game csgo -console -usercon +game_type 0 +game_mode 1 +map de_dust2 -tickrate 128 +sv_setsteamaccount {{STEAM_TOKEN}}",
+    "variables": [
+      {
+        "name": "STEAM_TOKEN",
+        "description": "Steam Game Server Login Token (GSLT)",
+        "env_variable": "STEAM_TOKEN",
+        "default_value": "",
+        "user_viewable": true,
+        "user_editable": true,
+        "required": true
+      }
+    ]
+  }
+  

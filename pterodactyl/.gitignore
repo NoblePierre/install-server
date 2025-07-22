@@ -1,0 +1,5 @@
+.env
+*.log
+/eggs/*.tar.gz
+/storage/
+/config.yml
