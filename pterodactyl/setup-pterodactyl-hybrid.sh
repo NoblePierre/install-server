@@ -38,7 +38,19 @@ echo ""
 
 echo "📦 Mise à jour système & installation dépendances..."
 apt update && apt upgrade -y
-apt install -y docker.io docker-compose-plugin curl ufw
+
+# Installation de Docker Engine
+apt install -y docker.io
+
+# Installation manuelle de Docker Compose v2
+DOCKER_COMPOSE_VERSION="2.24.6"
+mkdir -p ~/.docker/cli-plugins
+curl -SL "https://github.com/docker/compose/releases/download/v$DOCKER_COMPOSE_VERSION/docker-compose-linux-x86_64" \
+    -o ~/.docker/cli-plugins/docker-compose
+chmod +x ~/.docker/cli-plugins/docker-compose
+
+# Vérifie que tout fonctionne
+docker compose version
 
 echo "🐳 Démarrage des services Docker..."
 systemctl enable --now docker
